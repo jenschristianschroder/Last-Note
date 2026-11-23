@@ -21,6 +21,22 @@ jobs:
         run: |
           for module in game/*.mjs; do node --check "$module"; done
           node --test
+      - name: Version local asset URLs for this release
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+
+          game = Path("game")
+          revision = os.environ["GITHUB_SHA"][:12]
+          modules = sorted(game.glob("*.mjs"))
+          assets = [*modules, game / "style.css", *sorted((game / "fonts").glob("*.woff2"))]
+          for source in [game / "index.html", game / "style.css", *modules]:
+              text = source.read_text()
+              for asset in assets:
+                  url = "./" + asset.relative_to(game).as_posix()
+                  text = text.replace(url, url + "?v=" + revision)
+              source.write_text(text)
       - uses: actions/upload-pages-artifact@v4
         with:
           path: game
