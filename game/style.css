@@ -161,3 +161,7 @@ kbd:not(:first-child){margin-left:12px}
 #payout-pop{position:absolute;left:18%;top:53%;transform:translate(-50%,-62px);color:#f8d497;text-shadow:0 0 8px #1b1820;font:600 16px/1 var(--sans);opacity:0;pointer-events:none}
 #payout-pop.show{animation:pay .83s ease-out}
 @keyframes pay{0%{opacity:0;translate:0 5px}18%,60%{opacity:1}100%{opacity:0;translate:0 -9px}}
+#new-score{margin-top:16px;padding-top:12px;border-top:1px solid var(--edge);font-size:13px;color:var(--muted)}
+#new-score summary{cursor:pointer;width:max-content;max-width:100%}
+#new-score summary:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+#new-score p{margin:8px 0}

@@ -1,5 +1,5 @@
 import { TARGET_BARS, TEMPOS, KEYS, advance, align, amount, bellCost, canRecord, conductorRest, keyIndex,
-  payout, placeBell, record, restore, serialize, setCircuit, settleArchive, transport } from './engine.mjs';
+  newScore, payout, placeBell, record, restore, serialize, setCircuit, settleArchive, transport } from './engine.mjs';
 import { cosmos, icon, OrbitMap } from './art.mjs';
 import { Ensemble } from './music.mjs';
 
@@ -277,6 +277,16 @@ $('guide-open').addEventListener('click',()=>{
   resumeAfterGuide=s.status==='running';
   if(resumeAfterGuide){transport(s);schedule();render();save();}
   guide.showModal();guide.querySelectorAll('canvas').forEach(e=>icon(e));
+});
+$('confirm-new').addEventListener('click',()=>{
+  const muted=s.muted;
+  s=newScore();s.muted=muted;
+  placing=false;resumeAfterGuide=false;recentBell=-1000;
+  $('new-score').open=false;
+  $('announcement').textContent='';
+  $('payout-pop').classList.remove('show');
+  guide.close();cosmos($('cosmos'),s.movement);render();schedule();save();
+  say('A new score is ready.');
 });
 guide.querySelectorAll('.close,.close-guide').forEach(b=>b.addEventListener('click',()=>guide.close()));
 guide.addEventListener('close',()=>{
