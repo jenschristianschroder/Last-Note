@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { advance, align, bellCost, canRecord, conductorRest, newScore, payout, placeBell, record,
+import { advance, align, canRecord, conductorRest, newScore, payout, instrumentCost, placeInstrument, record,
   restore, serialize, setCircuit, settleArchive, transport } from '../game/engine.mjs';
 
+const bellCost = s => instrumentCost(s, 'bell');
+const placeBell = (s, beat) => placeInstrument(s, 'bell', beat, s.slots.indexOf('bell') + 1);
 const beats = (s, count) => Array.from({length: count}, () => advance(s)).flat();
 function firstPhrase() {
   const s = newScore(0);
@@ -88,10 +90,11 @@ test('recorded phrases keep paying after a reload and cap a single absence at ei
 test('a rest starts on a return; a delayed bell covers beat three, and releasing pays the bonus once', () => {
   const s = firstPhrase();
   record(s, 0);
+  placeInstrument(s, 'harp', 1);
   setCircuit(s, 4);
   transport(s);
   beats(s, 32);
-  record(s, 0);
+  assert.equal(record(s, 0), true);
   placeBell(s, 2);
   setCircuit(s, 4);
   transport(s);
@@ -113,9 +116,21 @@ test('a saved performance returns paused with the exact large balance and reject
   const saved = restore(serialize(s), 1);
   assert.equal(saved.status, 'paused');
   assert.equal(saved.resonance, s.resonance);
-  assert.equal(saved.bell, s.bell);
+  assert.deepEqual(saved.slots, s.slots);
   assert.equal(bellCost(saved), 3n);
   assert.equal(restore('broken', 1).movement, 1);
   const invalid = JSON.parse(serialize(s)); invalid.phase = 99;
   assert.equal(restore(JSON.stringify(invalid), 1).status, 'ready');
+});
+
+test('audio volume persists while existing saves receive a usable default', () => {
+  const s = firstPhrase();
+  s.volume = .45;
+  assert.equal(restore(serialize(s)).volume, .45);
+  const legacy = JSON.parse(serialize(s));
+  delete legacy.volume;
+  const recovered = restore(JSON.stringify(legacy));
+  assert.equal(recovered.volume, .7);
+  assert.equal(recovered.bars, 8);
+  assert.equal(recovered.resonance, s.resonance);
 });

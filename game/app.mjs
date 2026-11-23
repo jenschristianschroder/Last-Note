@@ -1,10 +1,10 @@
-import { TARGET_BARS, TEMPOS, KEYS, advance, align, amount, bellCost, canRecord, conductorRest, keyIndex,
-  newScore, payout, placeBell, record, restore, serialize, setCircuit, settleArchive, transport } from './engine.mjs';
-import { cosmos, icon, OrbitMap } from './art.mjs';
+import { TARGET_BARS, TEMPOS, KEYS, advance, align, amount, canRecord, conductorRest, instrumentCost, instrumentNotes, keyIndex,
+  newScore, payout, phraseEvents, placeInstrument, removeInstrument, record, restore, serialize, setCircuit, settleArchive, transport } from './engine.mjs';
+import { circuitLayout, cosmos, icon, OrbitMap } from './art.mjs';
 import { Ensemble } from './music.mjs';
+import { INSTRUMENTS, MOVEMENTS, countInstrument, longBeats, movement, requirements } from './levels.mjs';
 
 const $ = id => document.getElementById(id);
-const names = ['The First Echo', 'Counterpoint', 'The Conductor’s Rest', 'A Glass Horizon', 'The Far Octave', 'An Ocean of Bells'];
 const numerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
 const SAVE_KEY = 'last-note.score.v1';
 let raw;
@@ -12,18 +12,21 @@ try { raw = localStorage.getItem(SAVE_KEY); } catch { /* In private storage mode
 let s = restore(raw);
 const away = settleArchive(s);
 const ensemble = new Ensemble();
+ensemble.setVolume(s.volume);
+ensemble.setMuted(s.muted);
 const map = new OrbitMap($('routes'));
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const guide = $('guide');
 const sites = Object.fromEntries(Array.from(document.querySelectorAll('[data-site]'), e => [e.dataset.site, e]));
-let placing = false, beatTimer = 0, lastBeat = performance.now(), nextBeat = 0, recentBell = -1000;
-let toastTimer = 0, frame = 0, resumeAfterGuide = false, audioNoticeShown = false, lastScoreSignature = '';
+let placing = false, selectedType = 'bell', selectedSlot = 0, socketNodes = [], renderedMovement = 0;
+let beatTimer = 0, lastBeat = performance.now(), nextBeat = 0, recentBell = {at: -1000, slot: 0};
+let toastTimer = 0, frame = 0, resumeAfterGuide = false, lastScoreSignature = '';
+let soundCheckFrame = 0, soundCheckEnd = 0, soundCheckPeak = 0;
 const rows = [
   { label:'Tuning fork', tone:'#edc587', type:'fork' },
-  { label:'Echo chamber', tone:'#bea5ed', type:'chamber' },
-  { label:'Glass bell', tone:'#89d7ca', type:'bell' }
+  { label:'Echo chamber', tone:'#bea5ed', type:'chamber' }
 ];
-const lamps = [...$('beats').children];
+let lamps = [...$('beats').children];
 for (let i = 0; i < TARGET_BARS; i++) $('bar-marks').append(document.createElement('i'));
 
 function save() {
@@ -44,14 +47,76 @@ function flash(element) {
   void element.offsetWidth;
   element.classList.add('flash');
 }
+function renderSound() {
+  let label = 'Enable sound';
+  let detail = 'Enable sound to start the instruments.';
+  if (s.muted || s.volume === 0) {
+    label = 'Sound off';
+    detail = 'Sound is muted. Play a test chime to enable it.';
+  } else if (ensemble.audible) {
+    label = 'Sound on';
+    detail = 'Audio is ready.';
+  } else if (['interrupted', 'suspended', 'closed'].includes(ensemble.state)) {
+    label = 'Resume sound';
+    detail = 'Audio is paused by the browser. Tap to resume sound.';
+  } else if (ensemble.state === 'error') {
+    label = 'Retry sound';
+    detail = 'Audio could not start. Play a test chime to try again.';
+  }
+  $('sound-label').textContent = label;
+  $('sound').setAttribute('aria-pressed', String(ensemble.audible));
+  $('sound').title = ensemble.audible ? 'Mute the instruments' : 'Activate audio and play a chime';
+  updateIcon($('sound').querySelector('canvas'), ensemble.audible ? 'sound' : 'muted');
+  $('audio-status').textContent = detail;
+  $('volume').value = Math.round(s.volume * 100);
+  $('volume-value').textContent = Math.round(s.volume * 100) + '%';
+}
 async function enableSound() {
   if (s.muted) return false;
   const okay = await ensemble.unlock(false);
-  if (!okay && !audioNoticeShown) {
-    audioNoticeShown = true;
-    say('Audio is unavailable here. The map and live score show every note.');
-  }
+  renderSound();
+  if (!okay) say('Audio needs activation. Use Enable sound, or try the sound check in Field guide.');
   return okay;
+}
+function measureSound(now) {
+  const level = ensemble.outputLevel();
+  soundCheckPeak = Math.max(soundCheckPeak, level);
+  $('audio-level').value = Math.min(1, level * 5);
+  $('audio-level').dataset.peak = soundCheckPeak.toFixed(6);
+  if (now < soundCheckEnd && guide.open) {
+    soundCheckFrame = requestAnimationFrame(measureSound);
+    return;
+  }
+  soundCheckFrame = 0;
+  $('audio-level').value = Math.min(1, soundCheckPeak * 5);
+  $('audio-result').textContent = soundCheckPeak > .001
+    ? 'Chime generated. If it is silent, check the browser tab and your device’s media volume.'
+    : 'No output detected. Tap Play test chime to activate audio again.';
+}
+function activateSound() {
+  s.muted = false;
+  if (s.volume === 0) s.volume = .7;
+  ensemble.setVolume(s.volume);
+  return enableSound();
+}
+function testSound() {
+  const activated = activateSound();
+  $('audio-result').textContent = 'Starting the test chime…';
+  $('audio-level').value = 0;
+  $('audio-level').dataset.peak = '0';
+  cancelAnimationFrame(soundCheckFrame);
+  renderSound(); save();
+  activated.then(ok => {
+    if (!ok || s.muted) {
+      $('audio-result').textContent = 'Audio did not start. Tap Play test chime to retry.';
+      return;
+    }
+    ensemble.play([{ type: 'bell' }], keyIndex(s), false);
+    $('audio-result').textContent = 'Playing a glass-bell chime…';
+    soundCheckPeak = 0;
+    soundCheckEnd = performance.now() + 1800;
+    soundCheckFrame = requestAnimationFrame(measureSound);
+  });
 }
 function events(list) {
   ensemble.play(list, keyIndex(s), s.muted);
@@ -65,7 +130,8 @@ function events(list) {
       void pop.offsetWidth;
       pop.classList.add('show');
     }
-    if (e.type === 'bell') { recentBell = performance.now(); flash(s.bell === 1 ? sites.one : sites.two); }
+    if (e.slot && socketNodes[e.slot - 1]) flash(socketNodes[e.slot - 1]);
+    if (e.type === 'bell') recentBell = {at: performance.now(), slot: e.slot};
     if (e.type === 'fade') {
       say('The fork fell silent. Change the route or move the bell and try again.');
       $('announcement').textContent = 'The fork fell silent.';
@@ -74,58 +140,137 @@ function events(list) {
   }
 }
 function objective() {
-  if (s.status === 'faded') return ['The fork fell silent', 'A three-beat gap broke the sound. Try Socket II or the short circuit, then rekindle the fork.'];
-  if (s.resting) return ['Hold the silence', 'Each beat doubles the returning chord. Release it before three beats pass without an echo.'];
-  if (canRecord(s)) return ['Your phrase is ready', 'Record these eight bars to hear them inside the next movement.'];
-  if (s.status === 'ready' && s.circuit === 2 && s.movement === 1 && !s.resonance && !s.bell) return ['Wake the tuning fork', 'Strike the fork to send a note around the short circuit.'];
-  if (placing) return ['Choose a bell socket', 'Tap a socket on the map. The bell will answer on that beat of the long circuit.'];
-  if (s.circuit === 4) {
-    if (!(s.bell === 2 || (s.voices.length && s.alignment === 'stagger'))) return ['Find the missing echo', 'The fork needs an answer before beat three. Move the bell or earn one on the short circuit.'];
-    return ['Keep eight bars ringing', 'Each clean four-beat return adds a bar. Hold this arrangement to record the phrase.'];
-  }
-  if (s.voices.length) return ['Bring in the next voice', 'Try the long circuit. Your recorded phrase can sustain beat two in stagger, or double a return in unison.'];
-  if (s.bell) return ['Stretch the circuit', 'Switch to the four-beat route and listen for the bell’s answer.'];
-  if (s.resonance >= bellCost(s)) return ['Place a glass bell', 'Choose a socket for the answering echo. A halfway chime divides a four-beat trip into two safe gaps.'];
-  return ['Gather three resonance', 'Keep the short circuit ringing. Each return brings one resonance toward your first glass bell.'];
+  if (s.status === 'faded') return ['The fork fell silent', 'Cover the three-beat gap with a bell, a pulse drum, or a staggered phrase, then rekindle the fork.'];
+  if (s.resting) return ['Hold the silence', 'Each beat doubles the returning chord. A glass bell answers on beat three. Release before the fork fades.'];
+  if (canRecord(s)) return ['Your phrase is ready', 'Record these eight bars to unlock the next movement.'];
+  if (placing) return ['Place ' + INSTRUMENTS[selectedType].name.toLowerCase(),
+    selectedSlot ? 'Choose another socket to move this instrument for free. Occupied sockets swap instruments.' : INSTRUMENTS[selectedType].description + ' Choose a socket on the map.'];
+  if (s.movement > 1) return [s.circuit === 2 ? 'Arrange the next movement' : 'Keep eight bars ringing', movement(s).lesson];
+  if (s.status === 'ready' && !s.resonance && !countInstrument(s,'bell')) return ['Wake the tuning fork', 'Strike the fork to send a note around the short circuit.'];
+  if (s.circuit !== 2) return ['Keep eight bars ringing', 'A bell on beat two splits the four-beat journey into two safe gaps.'];
+  if (countInstrument(s,'bell')) return ['Stretch the circuit', 'Switch to the four-beat route and listen for the bell’s answer.'];
+  if (s.resonance >= instrumentCost(s,'bell')) return ['Place a glass bell', 'Choose a socket for the answering echo. A halfway chime divides a four-beat trip into two safe gaps.'];
+  return ['Gather three resonance', 'Each short return brings one resonance toward your first glass bell.'];
 }
 function noteInScore(type, beat) {
-  if (type === 'phrase') {
-    const phase = (beat + (s.alignment === 'stagger' ? 2 : 0)) % 4;
-    return s.voices.some(voice => voice.pattern[phase]);
-  }
+  if (type === 'phrase') return phraseEvents(s,beat).length > 0;
   const phase = beat % s.circuit;
   if (type === 'fork') return phase === 0;
   if (type === 'chamber') return phase === s.circuit - 1;
-  return s.circuit === 4 && s.bell !== 0 && phase === s.bell;
+  return instrumentNotes(s,beat).some(note=>note.type===type);
+}
+function renderMap() {
+  if (renderedMovement === s.movement) return;
+  renderedMovement = s.movement;
+  const layout = circuitLayout(longBeats(s));
+  const position = (node, p) => {
+    node.style.setProperty('--x', p.x * 100 + '%');
+    node.style.setProperty('--y', p.y * 100 + '%');
+  };
+  position(sites.fork,layout.fork); position(sites.chamber,layout.chamber);
+  $('payout-pop').style.left=layout.fork.x*100+'%';
+  $('payout-pop').style.top=layout.fork.y*100+'%';
+  for(const node of socketNodes) node.remove();
+  socketNodes=layout.slots.map((p,i)=>{
+    const node=document.createElement('button');
+    node.className='node socket';node.dataset.slot=i+1;
+    node.innerHTML='<span class="orb"><canvas data-icon="plus" aria-hidden="true"></canvas></span><span class="node-label"></span>';
+    position(node,p);node.addEventListener('click',()=>mount(i+1));
+    $('field').append(node);return node;
+  });
+  $('instruments').replaceChildren();
+  const next=Object.entries(INSTRUMENTS).find(([,v])=>v.unlock>s.movement)?.[0];
+  for(const [type,definition] of Object.entries(INSTRUMENTS)) {
+    if(definition.unlock>s.movement && type!==next)continue;
+    const button=document.createElement('button');
+    button.className='instrument';button.dataset.instrument=type;
+    button.style.setProperty('--instrument-color',definition.color);
+    button.disabled=s.movement<definition.unlock;
+    button.innerHTML='<span class="tile-icon"><canvas aria-hidden="true"></canvas></span><span class="tile-text"><strong></strong><small></small></span><span class="price"></span>';
+    button.querySelector('strong').textContent=definition.name;
+    button.querySelector('canvas').dataset.icon=definition.icon;
+    button.addEventListener('click',()=>{
+      selectedType=type;selectedSlot=0;placing=true;render();
+      say('Choose a socket for '+definition.name.toLowerCase()+'.');
+    });
+    $('instruments').append(button);
+  }
+  $('journey-progress').textContent=s.movement<=8?s.movement+' / 8':'Encore '+(Math.floor((s.movement-9)/5)+1);
+  $('journey-items').replaceChildren();
+  MOVEMENTS.forEach((level,i)=>{
+    const item=document.createElement('li');
+    item.classList.toggle('completed',s.movement>i+1);item.classList.toggle('current',s.movement===i+1);
+    const name=document.createElement('strong');name.textContent=level.title;
+    const info=document.createElement('span');info.textContent=level.beats+' beats · '+(s.movement>i+1?'Recorded':s.movement===i+1?'Playing':'Upcoming');
+    item.append(name,info);$('journey-items').append(item);
+  });
+  document.querySelectorAll('#instruments canvas,.node canvas').forEach(e=>icon(e));
+}
+function renderInstruments() {
+  for(const button of $('instruments').children) {
+    const type=button.dataset.instrument,definition=INSTRUMENTS[type],count=countInstrument(s,type);
+    const active=placing&&selectedType===type;
+    button.classList.toggle('placing',active);
+    button.setAttribute('aria-pressed',String(active));
+    button.querySelector('small').textContent=button.disabled?'Unlocks in movement '+numerals[definition.unlock-1]:
+      active&&selectedSlot?'Moving from beat '+selectedSlot:count?count+' mounted':'Choose a socket';
+    button.querySelector('.price').textContent=button.disabled?'Locked':'✧ '+amount(instrumentCost(s,type));
+  }
+  socketNodes.forEach((node,i)=>{
+    const type=s.slots[i],definition=INSTRUMENTS[type],selected=selectedSlot===i+1;
+    node.classList.toggle('installed',!!type);node.classList.toggle('target',placing&&!selected);
+    node.classList.toggle('selected-node',placing&&selected);
+    node.style.setProperty('--node',definition?.color||'#9bb7b9');
+    node.querySelector('.node-label').textContent=definition?definition.name+' · '+(i+1):'Socket '+numerals[i];
+    node.setAttribute('aria-label',definition&&!placing?'Select '+definition.name+' at beat '+(i+1):
+      'Place '+INSTRUMENTS[selectedType].name.toLowerCase()+' on socket '+(i+1)+', beat '+(i+1));
+    updateIcon(node.querySelector('canvas'),definition?.icon||'plus');
+  });
+  $('instrument-help').textContent=placing?INSTRUMENTS[selectedType].description:
+    'Select a card, then a socket. Select a placed instrument to move it for free.';
+  $('remove-instrument').hidden=!selectedSlot||!placing;
+  if(selectedSlot) $('remove-instrument').textContent='Remove · refund '+amount(instrumentCost(s,selectedType));
+  const list=$('level-goals');list.replaceChildren();
+  for(const goal of requirements(s)){
+    const item=document.createElement('li');item.textContent=(goal.met?'✓ ':'○ ')+goal.label;
+    item.classList.toggle('complete',goal.met);list.append(item);
+  }
+  list.hidden=!list.children.length;
 }
 function renderScore() {
-  const signature = [s.circuit,s.bell,s.movement,s.alignment].join('/');
+  const columns=s.circuit===2?8:s.circuit*2, barLength=columns/2;
+  const signature = [s.circuit,s.slots.join(','),s.movement,s.alignment].join('/');
   const score = $('score');
   if (signature !== lastScoreSignature) {
     lastScoreSignature = signature;
     score.replaceChildren();
+    score.style.gridTemplateColumns='minmax(84px,1.55fr) repeat('+columns+',minmax(8px,1fr))';
+    $('time-sign').textContent=barLength+'/4';
     score.append(document.createElement('span'));
-    for (let j = 1; j <= 8; j++) {
+    for (let j = 1; j <= columns; j++) {
       const head = document.createElement('span');
-      head.className = 'score-colhead' + (j === 5 ? ' bar-start' : '');
-      head.textContent = String((j-1)%4+1); score.append(head);
+      head.className = 'score-colhead' + (j === barLength+1 ? ' bar-start' : '');
+      head.textContent = String((j-1)%barLength+1); score.append(head);
     }
-    const tracks = s.voices.length ? [...rows,{label:'Archive',tone:'#a1b9ef',type:'phrase'}] : rows;
+    const instruments=Object.entries(INSTRUMENTS).filter(([type])=>type==='bell'||countInstrument(s,type))
+      .map(([type,v])=>({label:v.name,tone:v.color,type}));
+    const tracks=[...rows,...instruments];
+    if(s.voices.length)tracks.push({label:'Archive',tone:'#a1b9ef',type:'phrase'});
     for (const row of tracks) {
       const label = document.createElement('span');
       label.className = 'score-label';label.style.setProperty('--row',row.tone);
       label.append(document.createElement('i'), document.createTextNode(row.label));score.append(label);
-      for (let j=1; j<=8; j++) {
+      for (let j=1; j<=columns; j++) {
         const note = !!noteInScore(row.type,j);
         const cell=document.createElement('span');
-        cell.className='cell'+(note?' note':'')+(j===5?' bar-start':'');
+        cell.className='cell'+(note?' note':'')+(j===barLength+1?' bar-start':'');
         cell.style.setProperty('--row',row.tone);cell.dataset.beat=j;
-        cell.setAttribute('aria-label',row.label+', beat '+((j-1)%4+1)+(note?', note':', rest'));
+        cell.setAttribute('aria-label',row.label+', beat '+((j-1)%barLength+1)+(note?', note':', rest'));
         score.append(cell);
       }
     }
   }
-  const col = s.beat ? (s.beat-1)%8+1 : 0;
+  const col = s.beat ? (s.beat-1)%columns+1 : 0;
   for (const cell of score.querySelectorAll('.cell')) cell.classList.toggle('current', !s.resting && s.status !== 'faded' && +cell.dataset.beat === col);
 }
 function chosen(button, yes) {
@@ -133,15 +278,14 @@ function chosen(button, yes) {
   button.setAttribute('aria-pressed',String(yes));
 }
 function render() {
+  renderMap();
   $('movement').textContent=numerals[s.movement-1] || String(s.movement);
-  $('movement-title').textContent=names[(s.movement-1)%names.length];
+  $('movement-title').textContent=movement(s).title;
   $('resonance').textContent=amount(s.resonance);
   $('resonance').title=s.resonance.toString()+' resonance';
   $('recordings').textContent=String(s.movement-1);
   $('key').textContent=KEYS[keyIndex(s)]+' minor';
-  $('sound-label').textContent=s.muted?'Sound off':'Sound on';
-  $('sound').setAttribute('aria-pressed',String(!s.muted));
-  updateIcon($('sound').querySelector('canvas'),s.muted?'muted':'sound');
+  renderSound();
   const running=s.status==='running', faded=s.status==='faded';
   $('sky').classList.toggle('silent',faded);
   [...$('sustain').children].forEach((v,i)=>v.classList.toggle('dim',i>=3-s.age));
@@ -152,36 +296,28 @@ function render() {
   $('play').querySelector('span').textContent=playLabel;
   updateIcon($('play').querySelector('canvas'),running?'pause':'play');
   $('tempo').querySelector('span').textContent=s.tempo+' BPM';
-  for(let j=0;j<4;j++) lamps[j].classList.toggle('on',s.beat>0 && j===(s.beat-1)%4 && !faded);
+  const beats=s.circuit===2?4:s.circuit;
+  if(lamps.length!==beats){$('beats').replaceChildren(...Array.from({length:beats},()=>document.createElement('i')));lamps=[...$('beats').children];}
+  for(let j=0;j<beats;j++) lamps[j].classList.toggle('on',s.beat>0 && j===(s.beat-1)%beats && !faded);
   const [title,body]=objective();
   $('objective-title').textContent=title;$('objective-text').textContent=body;
-  $('bar-progress').hidden=s.circuit!==4;
+  $('bar-progress').hidden=s.circuit===2;
   $('bar-count').textContent=s.bars+' / '+TARGET_BARS;
   [...$('bar-marks').children].forEach((e,i)=>e.classList.toggle('on',i<s.bars));
-  chosen($('short'),s.circuit===2);chosen($('long'),s.circuit===4);
+  chosen($('short'),s.circuit===2);chosen($('long'),s.circuit!==2);
+  $('long').querySelector('small').textContent=longBeats(s)+' beats';
   $('return-value').textContent='+'+amount(payout(s))+' resonance';
-  $('bell').classList.toggle('placing',placing);
-  $('bell').setAttribute('aria-pressed',String(placing));
-  $('bell-sub').textContent=placing?'Choose a socket':s.bell?'Mounted on beat '+s.bell:'Place an answering echo';
-  $('bell-price').textContent=s.bell?'Move':'✧ '+amount(bellCost(s));
-  $('instrument-help').textContent=s.bell?'Move the bell between sockets for free. Moving restarts the phrase.':'The bell sends an echo back to the fork from its socket.';
-  [sites.one,sites.two].forEach((node,i)=>{
-    const installed=s.bell===i+1;
-    node.classList.toggle('installed',installed);node.classList.toggle('target',placing);
-    node.querySelector('.node-label').textContent=installed?'Glass bell':i===0?'Socket I':'Socket II';
-    node.setAttribute('aria-label',(installed?'Glass bell at':'Place glass bell on')+' socket '+(i+1)+', beat '+(i+1));
-    updateIcon(node.querySelector('canvas'),installed?'bell':'plus');
-  });
+  renderInstruments();
   $('archive-controls').hidden=!s.voices.length;
   if(s.voices.length){
     chosen($('stagger'),s.alignment==='stagger');chosen($('unison'),s.alignment==='unison');
-    $('voice-hint').textContent=(s.alignment==='stagger'?'The archive answers on beat two. ':'The archive doubles your long return. ')+'It earns '+amount(s.archiveYield)+' resonance per bar.';
+    $('voice-hint').textContent=(s.alignment==='stagger'?'The archive is offset by two beats. ':'The archive doubles your long return. ')+'It earns '+amount(s.archiveYield)+' resonance per four beats.';
   }
   $('rest-controls').hidden=s.movement<3;
-  $('rest').disabled=!running || s.circuit!==4;
+  $('rest').disabled=!running || s.circuit===2;
   $('rest').textContent=s.resting?'Release chord · ×'+(1n<<BigInt(s.restBeats)):s.restQueued?'Cancel queued rest':'Queue a rest';
   $('rest-hint').textContent=s.resting?'Release before the next three-beat gap.':'Hold the next long return. Each silent beat doubles its value.';
-  $('record-controls').hidden=s.circuit!==4;
+  $('record-controls').hidden=s.circuit===2;
   $('record').disabled=!canRecord(s)||s.resting;
   const recordIcon = $('record').querySelector('canvas');
   if (!$('record-controls').hidden && recordIcon.width === 300) icon(recordIcon);
@@ -215,23 +351,33 @@ function schedule(){
 }
 function toggleTransport(){
   const was=s.status;
+  const audio = was === 'running' ? null : enableSound();
   transport(s);render();schedule();save();
-  if(s.status==='running') {
-    enableSound().then(ok=>{
-      if(ok&&s.status==='running'&&was!=='paused')events([{type:'fork'}]);
-    });
-  }
+  audio?.then(ok=>{
+    if(ok&&s.status==='running'&&was!=='paused')events([{type:'fork'}]);
+  });
 }
 function changeLayout(change,message) {
   if(!change())return;
-  placing=false;render();schedule();save();
+  placing=false;selectedSlot=0;render();schedule();save();
   if(message)say(message);
 }
-function mount(n) {
-  if(s.bell===n){placing=false;render();say('The glass bell is mounted on beat '+n+'.');return;}
-  if(!s.bell && s.resonance<bellCost(s)){say('A glass bell costs '+amount(bellCost(s))+' resonance. Play the short circuit to earn it.');return;}
-  changeLayout(()=>placeBell(s,n),'Glass bell mounted on beat '+n+'.');
-  enableSound().then(ok=>{if(ok)ensemble.play([{type:'bell'}],keyIndex(s),s.muted);});
+function mount(beat) {
+  const existing=s.slots[beat-1];
+  if(!placing&&existing){
+    selectedType=existing;selectedSlot=beat;placing=true;render();
+    say('Choose another socket to move '+INSTRUMENTS[existing].name.toLowerCase()+'.');return;
+  }
+  if(selectedSlot===beat){placing=false;selectedSlot=0;render();return;}
+  const type=selectedType;
+  if(!placeInstrument(s,type,beat,selectedSlot)){
+    const refund=existing?instrumentCost(s,existing):0n;
+    const needed=instrumentCost(s,type)-refund-s.resonance;
+    say(needed>0n?'Earn '+amount(needed)+' more resonance to place this instrument.':'This instrument is already in that socket.');return;
+  }
+  placing=false;selectedSlot=0;render();schedule();save();
+  say(INSTRUMENTS[type].name+' mounted at beat '+beat+'.');
+  enableSound().then(ok=>{if(ok)ensemble.play([{type}],keyIndex(s),s.muted);});
 }
 $('play').addEventListener('click',toggleTransport);
 sites.fork.addEventListener('click',toggleTransport);
@@ -239,14 +385,10 @@ sites.chamber.addEventListener('click',()=>{
   say('The chamber turns the note home. This circuit returns '+amount(payout(s))+' resonance.');
   enableSound().then(ok=>{if(ok)ensemble.play([{type:'chamber'}],keyIndex(s),s.muted);});
 });
-sites.one.addEventListener('click',()=>mount(1));
-sites.two.addEventListener('click',()=>mount(2));
 $('short').addEventListener('click',()=>changeLayout(()=>setCircuit(s,2),'Two-beat circuit selected.'));
-$('long').addEventListener('click',()=>changeLayout(()=>setCircuit(s,4),'Four-beat circuit selected.'));
-$('bell').addEventListener('click',()=>{
-  if(!s.bell && s.resonance<bellCost(s)){say('Earn '+amount(bellCost(s)-s.resonance)+' more resonance on the short circuit.');return;}
-  placing=!placing;render();
-  if(placing){say('Choose Socket I or Socket II on the circuit map.');sites.two.focus();}
+$('long').addEventListener('click',()=>changeLayout(()=>setCircuit(s,longBeats(s)),longBeats(s)+'-beat circuit selected.'));
+$('remove-instrument').addEventListener('click',()=>{
+  changeLayout(()=>removeInstrument(s,selectedSlot),'Instrument removed and resonance refunded.');
 });
 $('stagger').addEventListener('click',()=>changeLayout(()=>align(s,'stagger'),'The recorded phrase now answers on beat two.'));
 $('unison').addEventListener('click',()=>changeLayout(()=>align(s,'unison'),'The recorded phrase now joins the returning chord.'));
@@ -254,7 +396,7 @@ $('record').addEventListener('click',()=>{
   const oldKey=keyIndex(s);
   if(!record(s))return;
   ensemble.play([{type:'record'}],oldKey,s.muted);
-  placing=false;cosmos($('cosmos'),s.movement);render();schedule();save();
+  placing=false;selectedSlot=0;selectedType='bell';cosmos($('cosmos'),s.movement);render();schedule();save();
   say('Phrase recorded. It now plays inside movement '+(numerals[s.movement-1]||s.movement)+'.');
 });
 $('rest').addEventListener('click',()=>{
@@ -268,20 +410,37 @@ $('tempo').addEventListener('click',()=>{
   s.archiveTime=Date.now();render();schedule();save();say('Tempo set to '+s.tempo+' BPM.');
 });
 function toggleSound(){
-  s.muted=!s.muted;ensemble.setMuted(s.muted);
-  if(!s.muted)enableSound().then(ok=>{if(ok&&s.status!=='running')ensemble.play([{type:'bell'}],keyIndex(s),s.muted);});
-  render();save();
+  if (ensemble.audible) {
+    s.muted = true;
+    ensemble.setMuted(true);
+  } else {
+    activateSound().then(ok=>{
+      if(ok&&!s.muted) ensemble.play([{type:'bell'}],keyIndex(s),false);
+    });
+  }
+  renderSound(); save();
 }
 $('sound').addEventListener('click',toggleSound);
+$('test-sound').addEventListener('click',testSound);
+$('volume').addEventListener('input',()=>{
+  s.volume = Number($('volume').value) / 100;
+  ensemble.setVolume(s.volume);
+  if (s.volume > 0) {
+    s.muted = false;
+    void enableSound();
+  }
+  renderSound(); save();
+});
+ensemble.onstatechange = renderSound;
 $('guide-open').addEventListener('click',()=>{
   resumeAfterGuide=s.status==='running';
   if(resumeAfterGuide){transport(s);schedule();render();save();}
   guide.showModal();guide.querySelectorAll('canvas').forEach(e=>icon(e));
 });
 $('confirm-new').addEventListener('click',()=>{
-  const muted=s.muted;
-  s=newScore();s.muted=muted;
-  placing=false;resumeAfterGuide=false;recentBell=-1000;
+  const { muted, volume }=s;
+  s=newScore();s.muted=muted;s.volume=volume;
+  placing=false;selectedSlot=0;selectedType='bell';resumeAfterGuide=false;recentBell={at:-1000,slot:0};
   $('new-score').open=false;
   $('announcement').textContent='';
   $('payout-pop').classList.remove('show');
@@ -290,6 +449,9 @@ $('confirm-new').addEventListener('click',()=>{
 });
 guide.querySelectorAll('.close,.close-guide').forEach(b=>b.addEventListener('click',()=>guide.close()));
 guide.addEventListener('close',()=>{
+  cancelAnimationFrame(soundCheckFrame);
+  soundCheckFrame = 0;
+  if (resumeAfterGuide) void enableSound();
   if(resumeAfterGuide&&!document.hidden&&s.status==='paused'){transport(s);render();schedule();save();}
   resumeAfterGuide=false;
 });
@@ -297,7 +459,7 @@ document.addEventListener('keydown',e=>{
   if(e.altKey||e.ctrlKey||e.metaKey||e.repeat||guide.open)return;
   if(e.key.toLowerCase()==='m'){e.preventDefault();toggleSound();}
   if(e.code==='Space' && !e.target.closest('button,input,select,textarea')){e.preventDefault();toggleTransport();}
-  if(e.key==='Escape'&&placing){placing=false;render();}
+  if(e.key==='Escape'&&placing){placing=false;selectedSlot=0;render();}
 });
 function restPage(){
   if(s.status==='running')transport(s);
@@ -310,7 +472,7 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('pagehide',restPage);
 window.addEventListener('storage',e=>{
   if(e.key!==SAVE_KEY || !e.newValue)return;
-  s=restore(e.newValue);placing=false;ensemble.setMuted(s.muted);cosmos($('cosmos'),s.movement);render();schedule();
+  s=restore(e.newValue);placing=false;selectedSlot=0;selectedType='bell';ensemble.setVolume(s.volume);ensemble.setMuted(s.muted);cosmos($('cosmos'),s.movement);render();schedule();
 });
 setInterval(()=>{
   if(document.hidden || s.status==='running' || !s.archiveYield)return;

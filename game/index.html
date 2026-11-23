@@ -16,7 +16,7 @@
     <div class="brand"><canvas data-icon="brand" aria-hidden="true"></canvas><span>The Last Note</span></div>
     <nav aria-label="Game controls">
       <button class="quiet-button" id="guide-open"><canvas data-icon="book" aria-hidden="true"></canvas><span>Field guide</span></button>
-      <button class="quiet-button" id="sound" aria-pressed="true"><canvas data-icon="sound" aria-hidden="true"></canvas><span id="sound-label">Sound on</span></button>
+      <button class="quiet-button" id="sound" aria-pressed="false"><canvas data-icon="sound" aria-hidden="true"></canvas><span id="sound-label">Enable sound</span></button>
     </nav>
   </div></header>
   <main>
@@ -39,12 +39,6 @@
               <button class="node source" data-site="fork" style="--x:18%;--y:53%" aria-label="Tuning fork, strike or pause">
                 <span class="orb"><canvas data-icon="fork" aria-hidden="true"></canvas></span><span class="node-label">Tuning fork</span><span id="sustain" class="sustain" aria-hidden="true"><i></i><i></i><i></i></span>
               </button>
-              <button class="node socket" data-site="one" style="--x:35%;--y:22%" aria-label="Place glass bell on socket one, beat one">
-                <span class="orb"><canvas data-icon="plus" aria-hidden="true"></canvas></span><span class="node-label">Socket I</span>
-              </button>
-              <button class="node socket" data-site="two" style="--x:64%;--y:23%" aria-label="Place glass bell on socket two, beat two">
-                <span class="orb"><canvas data-icon="plus" aria-hidden="true"></canvas></span><span class="node-label">Socket II</span>
-              </button>
               <button class="node chamber" data-site="chamber" style="--x:81%;--y:56%" aria-label="Inspect echo chamber">
                 <span class="orb"><canvas data-icon="crystal" aria-hidden="true"></canvas></span><span class="node-label">Echo chamber</span>
               </button>
@@ -60,7 +54,7 @@
         </section>
 
         <section class="score panel" aria-labelledby="score-heading">
-          <div class="section-top"><h2 id="score-heading"><canvas data-icon="score" aria-hidden="true"></canvas>Live score</h2><span class="time-sign">4/4</span></div>
+          <div class="section-top"><h2 id="score-heading"><canvas data-icon="score" aria-hidden="true"></canvas>Live score</h2><span class="time-sign" id="time-sign">4/4</span></div>
           <div class="score-grid" id="score" aria-label="Two bars of the current phrase"></div>
         </section>
       </div>
@@ -70,6 +64,7 @@
           <p class="eyebrow"><canvas data-icon="northstar" aria-hidden="true"></canvas>Current objective</p>
           <h2 id="objective-title">Wake the tuning fork</h2>
           <p id="objective-text">Strike the fork to send a note around the short circuit.</p>
+          <ul class="level-goals" id="level-goals"></ul>
           <div class="bar-progress" id="bar-progress" hidden><div class="progress-label"><span>Stable bars</span><span id="bar-count">0 / 8</span></div><div id="bar-marks"></div></div>
         </section>
         <section class="desk panel" aria-labelledby="desk-title">
@@ -80,9 +75,10 @@
           </div></fieldset>
           <div class="return-info"><span>On return</span><b id="return-value">+1 resonance</b></div>
           <div class="desk-line"></div>
-          <h3>Instrument</h3>
-          <button class="instrument" id="bell"><span class="tile-icon"><canvas data-icon="bell" aria-hidden="true"></canvas></span><span class="tile-text"><strong>Glass bell</strong><small id="bell-sub">Place an answering echo</small></span><span class="price" id="bell-price">✧ 3</span></button>
-          <p id="instrument-help" class="tool-hint">The bell sends an echo back to the fork from its socket.</p>
+          <h3>Instruments</h3>
+          <div id="instruments"></div>
+          <p id="instrument-help" class="tool-hint">Select an instrument, then choose a socket.</p>
+          <button class="quiet-button remove-instrument" id="remove-instrument" hidden>Remove selected instrument</button>
           <div id="archive-controls" hidden>
             <div class="desk-line"></div>
             <fieldset><legend>Recorded phrase</legend><div class="choices compact"><button class="choice" id="stagger">Stagger</button><button class="choice" id="unison">Unison</button></div></fieldset>
@@ -93,17 +89,31 @@
         </section>
       </aside>
     </div>
+    <details class="journey panel" id="journey"><summary>Movements <span id="journey-progress"></span></summary><ol id="journey-items"></ol></details>
     <p id="announcement" class="sr-only" aria-live="polite"></p>
   </main>
 
   <dialog id="guide"><div class="dialog-head"><div><p class="eyebrow">Field guide</p><h2>Keeping a note alive</h2></div><button class="close" aria-label="Close field guide"><canvas data-icon="close" aria-hidden="true"></canvas></button></div>
     <ol class="guide-steps">
       <li><strong>Strike the fork.</strong> A two-beat return earns one resonance in the first movement. Your fork fades if three beats pass between echoes.</li>
-      <li><strong>Place a glass bell.</strong> Earn three resonance, then tap a socket. On the long circuit, a bell on beat two divides the journey into two safe gaps. You can move a bell for free.</li>
-      <li><strong>Record eight stable bars.</strong> Each long return completes one bar. Changing the layout starts the count again. If the fork fades, adjust the circuit and strike it again.</li>
-      <li><strong>Layer the next movement.</strong> Recorded phrases earn resonance each bar, including up to eight hours between visits. Stagger a phrase to send a supporting echo, or play in unison to double a long return.</li>
+      <li><strong>Place a glass bell.</strong> Earn three resonance, then tap a socket. On the long circuit, a bell on beat two divides the journey into two safe gaps. Select a placed instrument and then another socket to move it for free. Replacing an instrument returns its full cost.</li>
+      <li><strong>Complete a movement.</strong> Meet its instrument goals and hold eight stable bars. Later circuits grow to six and eight beats. Each long return completes one bar. Changing the layout starts the count again. If the fork fades, adjust the circuit and strike it again.</li>
+      <li><strong>Layer the next movement.</strong> Recorded phrases earn resonance each bar, including up to eight hours between visits. Stagger a phrase to send a supporting echo, or play in unison to double a long return. Harps add 50% per harp, drums sustain every second beat at half the payout, and each choir doubles a return in unison.</li>
       <li><strong>Conduct a rest.</strong> From movement three, queue a rest on a long return. Each held beat doubles its value. Release before the fork fades. A mounted bell answers on the third held beat.</li>
-    </ol><p class="shortcuts"><kbd>Space</kbd> Play / pause <kbd>M</kbd> Sound</p><button class="primary close-guide">Back to the score</button>
+    </ol>
+    <section class="sound-check" aria-labelledby="audio-heading">
+      <h3 id="audio-heading">Sound check</h3>
+      <p id="audio-status" role="status">Enable sound to start the instruments.</p>
+      <div class="audio-controls">
+        <button class="wide-action" id="test-sound">Play test chime</button>
+        <label for="volume">Volume <output id="volume-value" for="volume">70%</output>
+          <input type="range" id="volume" min="0" max="100" value="70" step="5">
+        </label>
+      </div>
+      <div class="audio-level"><label for="audio-level">Output</label><meter id="audio-level" min="0" max="1" value="0"></meter></div>
+      <p id="audio-result" aria-live="polite">Play a chime to check your speakers.</p>
+    </section>
+    <p class="shortcuts"><kbd>Space</kbd> Play / pause <kbd>M</kbd> Sound</p><button class="primary close-guide">Back to the score</button>
     <details id="new-score"><summary>Start a new score</summary><p>This clears the saved performance on this device and returns to the first movement.</p><button class="wide-action" id="confirm-new">Start over from movement I</button></details>
   </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>

@@ -1,3 +1,4 @@
+import { longBeats } from './levels.mjs';
 const TAU = Math.PI * 2;
 
 const iconPaths = {
@@ -5,6 +6,9 @@ const iconPaths = {
   fork: ['M10 3v12a6 6 0 0 0 12 0V3 M13 3v12a3 3 0 0 0 6 0V3 M16 21v8 M13 30h6', 'M5 6c-1 3-1 6 0 9m22-9c1 3 1 6 0 9'],
   crystal: ['M16 2 27 15 16 30 5 15Z M16 2l-4 13 4 15 4-15Z M5 15h22 M2 21c4 3 17 1 25-5'],
   bell: ['M7 21c3-4 3-6 3.5-10A5.6 5.6 0 0 1 16 6a5.6 5.6 0 0 1 5.5 5c.5 4 1 6 3.5 10 M6 22q10 4 20 0 M13 26q3 5 6 0 M16 3v3 M14 9c-1.5 1-2 4-2 6'],
+  harp: ['M7 4c15-4 19 4 16 23H8Z M7 4l4 23 M12 5v22 M16 6v21 M20 9v18 M8 28h18'],
+  drum: ['M5 11q11-7 22 0v13q-11 7-22 0Z M5 11q11 7 22 0 M6 14l5 12 5-10 5 10 5-12 M7 2l15 6 M25 2 10 8'],
+  choir: ['M6 12a3 3 0 1 1-.1 0 M16 8a4 4 0 1 1-.1 0 M26 12a3 3 0 1 1-.1 0 M1 28v-5q5-8 10 0v5 M10 28V19q6-8 12 0v9 M22 28v-5q4-8 9 0v5'],
   book: ['M3 6c5-1 9 0 13 3 4-3 8-4 13-3v19c-5-1-9 0-13 3-4-3-8-4-13-3Z M16 9v19'],
   sound: ['M3 13h6l7-6v18l-7-6H3Z M21 11q5 5 0 10 M25 7q9 9 0 18'],
   muted: ['M3 13h6l7-6v18l-7-6H3Z M22 12l7 8m0-8-7 8'],
@@ -121,8 +125,24 @@ export function cosmos(canvas, movement) {
 const point = (x,y) => ({x,y});
 const F=point(.18,.53), A=point(.35,.22), B=point(.64,.23), E=point(.81,.56);
 const home=[E,point(.70,.92),point(.32,.96),F];
-const short=[[F,point(.365,.40),point(.63,.42),E],home];
-const long=[[F,point(.214,.407),point(.28,.26),A],[A,point(.44,.15),point(.56,.16),B],[B,point(.71,.277),point(.785,.43),E],home];
+const firstLong=[[F,point(.214,.407),point(.28,.26),A],[A,point(.44,.15),point(.56,.16),B],[B,point(.71,.277),point(.785,.43),E],home];
+function makeLayout(points) {
+  const routes = points.map((p,i)=>{
+    const previous=points[(i+points.length-1)%points.length],next=points[(i+1)%points.length],after=points[(i+2)%points.length];
+    return [p,point(p.x+(next.x-previous.x)/6,p.y+(next.y-previous.y)/6),
+      point(next.x-(after.x-p.x)/6,next.y-(after.y-p.y)/6),next];
+  });
+  const fork=points[0],chamber=points.at(-1);
+  const middle=point((fork.x+chamber.x)/2,(fork.y+chamber.y)/2);
+  const short=[[fork,point(middle.x,middle.y-.1),point(chamber.x-.04,chamber.y-.12),chamber],routes.at(-1)];
+  return {fork,chamber,slots:points.slice(1,-1),long:routes,short};
+}
+const layouts={
+  4:{fork:F,chamber:E,slots:[A,B],long:firstLong,short:[[F,point(.365,.40),point(.63,.42),E],home]},
+  6:makeLayout([point(.14,.49),point(.27,.19),point(.53,.14),point(.78,.25),point(.84,.59),point(.49,.81)]),
+  8:makeLayout([point(.12,.49),point(.23,.20),point(.50,.12),point(.77,.20),point(.88,.49),point(.77,.77),point(.50,.82),point(.23,.77)])
+};
+export const circuitLayout = beats => layouts[beats];
 function at(segment,t,w,h) {
   const [a,b,c,d]=segment, u=1-t;
   return {x:w*(u*u*u*a.x+3*u*u*t*b.x+3*u*t*t*c.x+t*t*t*d.x),y:h*(u*u*u*a.y+3*u*u*t*b.y+3*u*t*t*c.y+t*t*t*d.y)};
@@ -138,7 +158,9 @@ export class OrbitMap {
     const {c,w,h}=this;
     if(!w || !h) return;
     c.clearRect(0,0,w,h);
-    const active=s.circuit===4?long:short, alt=s.circuit===4?short:long;
+    const layout=circuitLayout(longBeats(s));
+    const F=layout.fork,E=layout.chamber;
+    const active=s.circuit===2?layout.short:layout.long, alt=s.circuit===2?layout.long:layout.short;
     // The engravings remain still so the moving signal reads at a glance.
     c.save();c.strokeStyle='rgba(176,181,205,.13)';c.lineWidth=.7;
     c.beginPath();c.ellipse(.5*w,.53*h,.388*w,.36*h,-.035,0,TAU);c.stroke();
@@ -160,11 +182,14 @@ export class OrbitMap {
       c.save();c.translate(p.x,p.y);c.rotate(a);c.strokeStyle=grad;c.lineWidth=1.15;c.beginPath();c.moveTo(-4,-2.7);c.lineTo(0,0);c.lineTo(-4,2.7);c.stroke();c.restore();
     }
     c.globalAlpha=1;
-    if(s.bell && s.circuit===4) {
-      const p=s.bell===2?B:A, back=[p,point(p.x-.06,p.y+.10),point(F.x+.09,F.y-.02),F];
+    if(s.circuit!==2) s.slots.forEach((type,i)=>{
+      if(type!=='bell')return;
+      const p=layout.slots[i], back=[p,point(p.x*.72+F.x*.28,p.y+.09),point(F.x+.08,F.y-.05),F];
       c.strokeStyle='#78b9b389';c.lineWidth=.85;c.setLineDash([2,5]);c.beginPath();trace(c,back,w,h);c.stroke();c.setLineDash([]);
-      if(s.status==='running' && now-recentBell<390){const q=at(back,Math.max(0,(now-recentBell)/390),w,h);star(c,q.x,q.y,5,'#b8fff0');}
-    }
+      if(s.status==='running' && recentBell.slot===i+1 && now-recentBell.at<390){
+        const q=at(back,Math.max(0,(now-recentBell.at)/390),w,h);star(c,q.x,q.y,5,'#b8fff0');
+      }
+    });
     if(faded || s.resting) return;
     const t=s.status==='running'?Math.min(.999,Math.max(0,fraction)):0;
     const seg=active[s.phase], p=at(seg,t,w,h);

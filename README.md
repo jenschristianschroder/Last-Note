@@ -1,10 +1,10 @@
 # The Last Note
 
-A musical strategy game about keeping one tuning fork ringing. Start the transport, earn resonance on a short circuit, and place a glass bell to keep a longer circuit alive. Record eight stable bars to turn your first phrase into a voice in the next movement.
+A musical strategy game about keeping one tuning fork ringing. Start the transport, earn resonance on a short circuit, and place a glass bell to keep a longer circuit alive. Meet each movement’s goals and record eight stable bars to turn your phrase into a voice in the next movement. Eight authored movements introduce six- and eight-beat circuits, echo harps, pulse drums, choirs, and the conductor’s rest. Encores continue after movement eight.
 
 ## Play locally
 
-Run `python3 -m http.server 8000 --directory game` from the repository root and open http://localhost:8000. The game synthesizes its instruments in the browser and saves progress on the current device. Space controls playback and M toggles sound.
+Run `python3 -m http.server 8000 --directory game` from the repository root and open http://localhost:8000. The game synthesizes its instruments in the browser and saves progress on the current device. Space controls playback and M toggles sound. Use Enable sound to activate audio, or open Field guide for a test chime, output meter, and volume control.
 
 ## Test and deploy
 
