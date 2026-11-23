@@ -1,0 +1,121 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { advance, align, bellCost, canRecord, conductorRest, newScore, payout, placeBell, record,
+  restore, serialize, setCircuit, settleArchive, transport } from '../game/engine.mjs';
+
+const beats = (s, count) => Array.from({length: count}, () => advance(s)).flat();
+function firstPhrase() {
+  const s = newScore(0);
+  transport(s);
+  beats(s, 6);
+  assert.equal(placeBell(s, 2), true);
+  setCircuit(s, 4);
+  beats(s, 32);
+  return s;
+}
+test('short returns fund the first bell and pausing stops the clock', () => {
+  const s = newScore(0);
+  assert.equal(placeBell(s, 2), false);
+  transport(s);
+  beats(s, 5);
+  assert.equal(s.resonance, 2n);
+  transport(s);
+  beats(s, 10);
+  assert.equal(s.beat, 5);
+  transport(s);
+  beats(s, 1);
+  assert.equal(s.resonance, 3n);
+});
+test('a long loop fades on the third beat; the early socket leaves a fatal return gap', () => {
+  const s = newScore();
+  transport(s);
+  beats(s, 8);
+  setCircuit(s, 4);
+  assert.equal(beats(s, 3).at(-1).type, 'fade');
+  assert.equal(s.resonance, 4n);
+  assert.equal(placeBell(s, 1), true);
+  assert.equal(s.resonance, 1n);
+  transport(s);
+  assert.equal(advance(s)[0].type, 'bell');
+  assert.equal(beats(s, 3).at(-1).type, 'fade');
+  assert.equal(placeBell(s, 2), true);
+  transport(s);
+  assert.equal(beats(s, 4).at(-1).value, 6n);
+  assert.equal(s.resonance, 7n);
+});
+test('eight four-beat returns form a playable phrase; a layout edit restarts the bar count', () => {
+  const s = firstPhrase();
+  assert.equal(s.resonance, 48n);
+  assert.equal(canRecord(s), true);
+  assert.equal(placeBell(s, 2), false);
+  assert.equal(s.bars, 8);
+  setCircuit(s, 2);
+  assert.equal(canRecord(s), false);
+  setCircuit(s, 4);
+  beats(s, 28);
+  assert.equal(record(s, 0), false);
+  beats(s, 4);
+  assert.equal(record(s, 0), true);
+  assert.equal(record(s, 0), false);
+  assert.deepEqual(s.voices[0].pattern, [1, 0, 2, 4]);
+  assert.equal(s.archiveYield, 6n);
+  assert.equal(s.movement, 2);
+});
+test('stagger sustains a new loop; unison needs a midpoint bell and doubles the payout', () => {
+  const s = firstPhrase();
+  record(s, 0);
+  setCircuit(s, 4);
+  transport(s);
+  const notes = beats(s, 4);
+  assert.ok(notes.some(n => n.type === 'phrase' && n.mask === 1));
+  assert.equal(notes.at(-1).value, 12n);
+  align(s, 'unison');
+  assert.equal(beats(s, 3).at(-1).type, 'fade');
+  placeBell(s, 2);
+  transport(s);
+  assert.equal(beats(s, 4).at(-1).value, 24n);
+});
+test('recorded phrases keep paying after a reload and cap a single absence at eight hours', () => {
+  const s = firstPhrase();
+  record(s, 0);
+  assert.equal(settleArchive(s, 2499), 0n);
+  assert.equal(settleArchive(s, 2500), 6n);
+  assert.equal(settleArchive(s, 2500), 0n);
+  const later = restore(serialize(s), 86400000);
+  assert.equal(settleArchive(later, 86400000), 6n * BigInt(8*60*60*1000/2500));
+  assert.equal(settleArchive(later, 86400000), 0n);
+});
+test('a rest starts on a return; a delayed bell covers beat three, and releasing pays the bonus once', () => {
+  const s = firstPhrase();
+  record(s, 0);
+  setCircuit(s, 4);
+  transport(s);
+  beats(s, 32);
+  record(s, 0);
+  placeBell(s, 2);
+  setCircuit(s, 4);
+  transport(s);
+  assert.equal(conductorRest(s).type, 'queued');
+  beats(s, 4);
+  assert.equal(s.resting, true);
+  assert.equal(beats(s, 3).at(-1).type, 'bell');
+  const before = s.resonance;
+  const release = conductorRest(s);
+  assert.equal(release.multiplier, 8n);
+  assert.equal(s.resonance - before, payout(s) * 7n);
+  assert.equal(conductorRest(s).type, 'queued');
+  beats(s, 4);
+  assert.equal(beats(s, 6).at(-1).type, 'fade');
+});
+test('a saved performance returns paused with the exact large balance and rejects invalid data', () => {
+  const s = firstPhrase();
+  s.resonance = 10n ** 85n + 412n;
+  const saved = restore(serialize(s), 1);
+  assert.equal(saved.status, 'paused');
+  assert.equal(saved.resonance, s.resonance);
+  assert.equal(saved.bell, s.bell);
+  assert.equal(bellCost(saved), 3n);
+  assert.equal(restore('broken', 1).movement, 1);
+  const invalid = JSON.parse(serialize(s)); invalid.phase = 99;
+  assert.equal(restore(JSON.stringify(invalid), 1).status, 'ready');
+});
