@@ -46,7 +46,7 @@
             <div class="map-legend"><span><i class="solid"></i>Active circuit</span><span><i class="dashes"></i>Alternate route</span></div>
             <div class="key" id="key">D minor</div>
           </div>
-          <div class="transport">
+          <div class="transport" id="transport">
             <button id="play" class="primary"><canvas data-icon="play" aria-hidden="true"></canvas><span>Strike the fork</span></button>
             <div class="beat-block" aria-label="Beat within the bar"><span class="small-label">Beat</span><div class="beat-lamps" id="beats"><i></i><i></i><i></i><i></i></div></div>
             <button class="tempo" id="tempo" title="Change tempo"><canvas data-icon="tempo" aria-hidden="true"></canvas><span>96 BPM</span></button>
@@ -55,7 +55,7 @@
 
         <section class="score panel" aria-labelledby="score-heading">
           <div class="section-top"><h2 id="score-heading"><canvas data-icon="score" aria-hidden="true"></canvas>Live score</h2><span class="time-sign" id="time-sign">4/4</span></div>
-          <div class="score-grid" id="score" aria-label="Two bars of the current phrase"></div>
+          <div class="score-scroll" tabindex="0" role="region" aria-label="Scrollable live score"><div class="score-grid" id="score" aria-label="Two bars of the current phrase"></div></div>
         </section>
       </div>
 
@@ -97,7 +97,7 @@
     <ol class="guide-steps">
       <li><strong>Strike the fork.</strong> A two-beat return earns one resonance in the first movement. Your fork fades if three beats pass between echoes.</li>
       <li><strong>Place a glass bell.</strong> Earn three resonance, then tap a socket. On the long circuit, a bell on beat two divides the journey into two safe gaps. Select a placed instrument and then another socket to move it for free. Replacing an instrument returns its full cost.</li>
-      <li><strong>Complete a movement.</strong> Meet its instrument goals and hold eight stable bars. Later circuits grow to six and eight beats. Each long return completes one bar. Changing the layout starts the count again. If the fork fades, adjust the circuit and strike it again.</li>
+      <li><strong>Complete a movement.</strong> Meet its goals and hold eight stable bars. The 28 movements grow from four to twelve beats, with sparse ensembles, arrangements without drums, and longer rests. Each long return completes one bar. Changing the layout starts the count again. Encores continue after movement 28.</li>
       <li><strong>Layer the next movement.</strong> Recorded phrases earn resonance each bar, including up to eight hours between visits. Stagger a phrase to send a supporting echo, or play in unison to double a long return. Harps add 50% per harp, drums sustain every second beat at half the payout, and each choir doubles a return in unison.</li>
       <li><strong>Conduct a rest.</strong> From movement three, queue a rest on a long return. Each held beat doubles its value. Release before the fork fades. A mounted bell answers on the third held beat.</li>
     </ol>

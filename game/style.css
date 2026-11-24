@@ -198,5 +198,11 @@ kbd:not(:first-child){margin-left:12px}
 .journey li span{font-size:11px;margin-top:5px;color:var(--muted)}
 .journey li.current{border-color:#9a7952;color:var(--gold);background:#2b2629}
 .journey li.completed{color:var(--mint)}
+.score-scroll{overflow-x:auto;padding-bottom:4px;scrollbar-color:#605746 #151b27}
+.score-scroll:focus-visible{outline:2px solid var(--gold);outline-offset:4px}
+.sky.extended{height:clamp(420px,34vw,540px)}
+.extended .socket .node-label{font-size:11px}
+@media(max-width:1000px){.transport.extended{flex-wrap:wrap}.transport.extended .beat-block{order:3;width:100%;justify-content:center;padding-bottom:4px}.transport.extended .beat-lamps i{width:12px}}
+@media(max-width:760px){.sky.extended{height:430px}.extended .node-label{font-size:10px}.extended .socket .node-label{white-space:normal;width:70px;text-align:center;font-size:10px}.extended .socket.installed{--orb:32px}.score-scroll .score-grid{min-width:340px}.score-colhead{min-width:10px}}
 @media(max-width:760px){.journey ol{grid-template-columns:repeat(2,minmax(0,1fr))}.socket.installed .node-label{font-size:10px}.socket.installed{--orb:34px}.score-grid{column-gap:3px}.beat-block{gap:5px}.beat-lamps{gap:3px}.beat-lamps i{width:9px}}
 @media(max-width:420px){.beat-lamps i{width:5px}.node-label{font-size:11px}.field{inset:36px 7px 34px}.sky{height:290px}}

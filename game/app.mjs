@@ -2,10 +2,11 @@ import { TARGET_BARS, TEMPOS, KEYS, advance, align, amount, canRecord, conductor
   newScore, payout, phraseEvents, placeInstrument, removeInstrument, record, restore, serialize, setCircuit, settleArchive, transport } from './engine.mjs';
 import { circuitLayout, cosmos, icon, OrbitMap } from './art.mjs';
 import { Ensemble } from './music.mjs';
-import { INSTRUMENTS, MOVEMENTS, countInstrument, longBeats, movement, requirements } from './levels.mjs';
+import { INSTRUMENTS, MOVEMENTS, countInstrument, encoreRound, longBeats, movement, requirements } from './levels.mjs';
 
 const $ = id => document.getElementById(id);
-const numerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+const numerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII',
+  'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX', 'XXI', 'XXII', 'XXIII', 'XXIV', 'XXV', 'XXVI', 'XXVII', 'XXVIII'];
 const SAVE_KEY = 'last-note.score.v1';
 let raw;
 try { raw = localStorage.getItem(SAVE_KEY); } catch { /* In private storage modes the current session still plays. */ }
@@ -145,7 +146,8 @@ function objective() {
   if (canRecord(s)) return ['Your phrase is ready', 'Record these eight bars to unlock the next movement.'];
   if (placing) return ['Place ' + INSTRUMENTS[selectedType].name.toLowerCase(),
     selectedSlot ? 'Choose another socket to move this instrument for free. Occupied sockets swap instruments.' : INSTRUMENTS[selectedType].description + ' Choose a socket on the map.'];
-  if (s.movement > 1) return [s.circuit === 2 ? 'Arrange the next movement' : 'Keep eight bars ringing', movement(s).lesson];
+  if (s.movement > 1) return [s.circuit === 2 ? 'Arrange the next movement' :
+    s.bars >= TARGET_BARS ? 'Complete the arrangement' : 'Keep eight bars ringing', movement(s).lesson];
   if (s.status === 'ready' && !s.resonance && !countInstrument(s,'bell')) return ['Wake the tuning fork', 'Strike the fork to send a note around the short circuit.'];
   if (s.circuit !== 2) return ['Keep eight bars ringing', 'A bell on beat two splits the four-beat journey into two safe gaps.'];
   if (countInstrument(s,'bell')) return ['Stretch the circuit', 'Switch to the four-beat route and listen for the bell’s answer.'];
@@ -163,6 +165,8 @@ function renderMap() {
   if (renderedMovement === s.movement) return;
   renderedMovement = s.movement;
   const layout = circuitLayout(longBeats(s));
+  $('sky').classList.toggle('extended',longBeats(s)>8);
+  $('transport').classList.toggle('extended',longBeats(s)>8);
   const position = (node, p) => {
     node.style.setProperty('--x', p.x * 100 + '%');
     node.style.setProperty('--y', p.y * 100 + '%');
@@ -195,16 +199,17 @@ function renderMap() {
     });
     $('instruments').append(button);
   }
-  $('journey-progress').textContent=s.movement<=8?s.movement+' / 8':'Encore '+(Math.floor((s.movement-9)/5)+1);
+  $('journey-progress').textContent=s.movement<=MOVEMENTS.length?s.movement+' / '+MOVEMENTS.length:'Encore '+encoreRound(s);
   $('journey-items').replaceChildren();
   MOVEMENTS.forEach((level,i)=>{
     const item=document.createElement('li');
     item.classList.toggle('completed',s.movement>i+1);item.classList.toggle('current',s.movement===i+1);
-    const name=document.createElement('strong');name.textContent=level.title;
+    const name=document.createElement('strong');name.textContent=(i+1)+'. '+level.title;
     const info=document.createElement('span');info.textContent=level.beats+' beats · '+(s.movement>i+1?'Recorded':s.movement===i+1?'Playing':'Upcoming');
     item.append(name,info);$('journey-items').append(item);
   });
   document.querySelectorAll('#instruments canvas,.node canvas').forEach(e=>icon(e));
+  map.resize();
 }
 function renderInstruments() {
   for(const button of $('instruments').children) {

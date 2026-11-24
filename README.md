@@ -1,6 +1,6 @@
 # The Last Note
 
-A musical strategy game about keeping one tuning fork ringing. Start the transport, earn resonance on a short circuit, and place a glass bell to keep a longer circuit alive. Meet each movement’s goals and record eight stable bars to turn your phrase into a voice in the next movement. Eight authored movements introduce six- and eight-beat circuits, echo harps, pulse drums, choirs, and the conductor’s rest. Encores continue after movement eight.
+A musical strategy game about keeping one tuning fork ringing. Start the transport, earn resonance on a short circuit, and place a glass bell to keep a longer circuit alive. Meet each movement’s goals and record eight stable bars to turn your phrase into a voice in the next movement. The 28 authored movements build from four- to twelve-beat circuits with echo harps, pulse drums, choirs, and the conductor’s rest. Later challenges include sparse ensembles, arrangements without drums, staggered phrases, and ×16 or ×32 rests. Encores revisit the twenty advanced arrangements after movement 28, with growing costs and returns.
 
 ## Play locally
 

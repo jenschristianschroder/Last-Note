@@ -137,10 +137,18 @@ function makeLayout(points) {
   const short=[[fork,point(middle.x,middle.y-.1),point(chamber.x-.04,chamber.y-.12),chamber],routes.at(-1)];
   return {fork,chamber,slots:points.slice(1,-1),long:routes,short};
 }
+function extendedLayout(beats) {
+  return makeLayout(Array.from({length: beats}, (_, i) => {
+    const angle = Math.PI + i * TAU / beats;
+    return point(.5 + .39 * Math.cos(angle), .46 + .4 * Math.sin(angle));
+  }));
+}
 const layouts={
   4:{fork:F,chamber:E,slots:[A,B],long:firstLong,short:[[F,point(.365,.40),point(.63,.42),E],home]},
   6:makeLayout([point(.14,.49),point(.27,.19),point(.53,.14),point(.78,.25),point(.84,.59),point(.49,.81)]),
-  8:makeLayout([point(.12,.49),point(.23,.20),point(.50,.12),point(.77,.20),point(.88,.49),point(.77,.77),point(.50,.82),point(.23,.77)])
+  8:makeLayout([point(.12,.49),point(.23,.20),point(.50,.12),point(.77,.20),point(.88,.49),point(.77,.77),point(.50,.82),point(.23,.77)]),
+  10:extendedLayout(10),
+  12:extendedLayout(12)
 };
 export const circuitLayout = beats => layouts[beats];
 function at(segment,t,w,h) {

@@ -23,7 +23,7 @@ export const canRecord = s => s.circuit === longBeats(s) && s.bars >= TARGET_BAR
 
 export function payout(s, circuit = s.circuit) {
   if (circuit === 2) return unit(s);
-  const value = {4: 6n, 6: 18n, 8: 42n}[circuit];
+  const value = {4: 6n, 6: 18n, 8: 42n, 10: 90n, 12: 186n}[circuit];
   const harps = BigInt(countInstrument(s, 'harp'));
   const unison = s.voices.length > 0 && s.alignment === 'unison';
   const choirs = unison ? countInstrument(s, 'choir') : 0;
@@ -211,7 +211,7 @@ export function record(s, now = Date.now()) {
 }
 
 export function serialize(s) {
-  return JSON.stringify({ ...s, version: 2, resonance: s.resonance.toString(), archiveYield: s.archiveYield.toString() });
+  return JSON.stringify({ ...s, version: 3, resonance: s.resonance.toString(), archiveYield: s.archiveYield.toString() });
 }
 
 const integer = (v, min, max) => Number.isSafeInteger(v) && v >= min && v <= max;
@@ -219,7 +219,7 @@ export function restore(raw, now = Date.now()) {
   if (!raw) return newScore(now);
   try {
     const v = JSON.parse(raw);
-    if (![1, 2].includes(v.version) || !integer(v.movement, 1, 1000000)) return newScore(now);
+    if (![1, 2, 3].includes(v.version) || !integer(v.movement, 1, 1000000)) return newScore(now);
     if (v.version === 1) {
       v.slots = Array(longBeats(v) - 2).fill(null);
       if ([1, 2].includes(v.bell)) v.slots[v.bell - 1] = 'bell';
@@ -228,12 +228,21 @@ export function restore(raw, now = Date.now()) {
         Object.assign(v, {circuit: 2, phase: 0, beat: 0, bars: 0, age: 0, restQueued: false, resting: false, restBeats: 0});
       }
     }
+    if (v.version === 2 && v.movement > 8) {
+      const oldBeats = [6, 6, 6, 8, 8][(v.movement - 9) % 5];
+      if (!Array.isArray(v.slots) || v.slots.length !== oldBeats - 2 ||
+          ![2, oldBeats].includes(v.circuit) || !integer(v.phase, 0, v.circuit - 1)) return newScore(now);
+      if (oldBeats !== longBeats(v)) {
+        v.slots = [...v.slots, ...Array(longBeats(v) - oldBeats).fill(null)];
+        Object.assign(v, {circuit: 2, phase: 0, beat: 0, bars: 0, age: 0, restQueued: false, resting: false, restBeats: 0});
+      }
+    }
     if (!/^\d+$/.test(v.resonance) || !/^\d+$/.test(v.archiveYield) ||
         ![2, longBeats(v)].includes(v.circuit) || !Array.isArray(v.slots) || v.slots.length !== longBeats(v) - 2 ||
         !v.slots.every(type => type === null || (Object.hasOwn(INSTRUMENTS, type) && INSTRUMENTS[type].unlock <= v.movement)) ||
         !Array.isArray(v.voices) || v.voices.length !== Math.min(3, v.movement - 1) ||
         !v.voices.every(p => integer(p.key, 0, ROOTS.length - 1) && Array.isArray(p.pattern) &&
-          [4, 6, 8].includes(p.pattern.length) && p.pattern.every(mask => integer(mask, 0, 63))) ||
+          [4, 6, 8, 10, 12].includes(p.pattern.length) && p.pattern.every(mask => integer(mask, 0, 63))) ||
         !integer(v.phase, 0, v.circuit - 1) || !integer(v.age, 0, 3) ||
         !integer(v.beat, 0, Number.MAX_SAFE_INTEGER) || !integer(v.bars, 0, TARGET_BARS) ||
         !integer(v.restBeats, 0, 6) || !integer(v.bestRest, 0, 5) || !Number.isFinite(v.archiveTime) || !TEMPOS.includes(v.tempo) ||
