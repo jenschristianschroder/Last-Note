@@ -6,6 +6,8 @@ A musical strategy game about keeping one tuning fork ringing. Start the transpo
 
 Run `python3 -m http.server 8000 --directory game` from the repository root and open http://localhost:8000. The game synthesizes its instruments in the browser and saves progress on the current device. Space controls playback and M toggles sound. Use Enable sound to activate audio, or open Field guide for a test chime, output meter, and volume control.
 
+The ensemble uses plucked-string overtones, resonant glass bells, a brushed drum transient, and layered vowel-shaped choirs. Recorded phrases retain their rhythms while harmonizing with the current movement. Instrument placement adds melodic and stereo variation. A damped stereo room, balanced ensemble levels, gentle compression, and a soft output ceiling keep larger arrangements controlled. Voices fade out when replaced, and polyphony is bounded for busy late-game circuits.
+
 ## Test and deploy
 
 Run `node --test` to check timing, payouts, recording, and save recovery. The Pages workflow runs the same checks and publishes the contents of `game/` on pushes to `main`.
